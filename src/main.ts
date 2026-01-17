@@ -2,6 +2,16 @@
 const STORE_NAME = 'notes';
 const NOTE_ID = 'main-note';
 
+// Request persistent storage
+async function requestPersistentStorage(): Promise<void> {
+  if (navigator.storage && navigator.storage.persist) {
+    const isPersisted = await navigator.storage.persisted();
+    if (!isPersisted) {
+      await navigator.storage.persist();
+    }
+  }
+}
+
 // Initialize IndexedDB
 function initDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -69,6 +79,9 @@ async function saveNote(content: string): Promise<void> {
 
 // Initialize the app
 async function init(): Promise<void> {
+  // Request persistent storage first
+  await requestPersistentStorage();
+
   const textarea = document.getElementById('notepad') as HTMLTextAreaElement;
 
   if (!textarea) {
