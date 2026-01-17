@@ -1,13 +1,10 @@
-import { Counter } from './Counter';
+import { Notes } from './Notes';
 import { GithubLink } from './GithubLink';
 
 export const App = (): string => {
   return `
-    <header>
-      <h2>This is a simple vanilla TS seed</h2>
-    </header>
     <main>
-      ${Counter()}
+      ${Notes()}
     </main>
     <footer>
       ${GithubLink()}
