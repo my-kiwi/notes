@@ -2,7 +2,7 @@ export const Notes = (): string => {
   return `
     <textarea id="notepad" placeholder="Start typing..."></textarea>
   `;
-}
+};
 
 const DB_NAME = 'NotesDB';
 const STORE_NAME = 'notes';
