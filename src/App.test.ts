@@ -3,6 +3,6 @@ import { App } from './App';
 
 describe('App', () => {
   it('renders hello world', () => {
-    expect(App()).toContain('This is a simple vanilla TS seed');
+    expect(App()).toContain('Start typing...');
   });
 });
