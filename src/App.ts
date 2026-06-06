@@ -6,7 +6,7 @@ export const App = (): string => {
     <main>
       ${Notes()}
     </main>
-    <footer>
+    <footer">
       ${GithubLink()}
     </footer>
     `;

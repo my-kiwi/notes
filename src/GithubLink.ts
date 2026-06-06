@@ -25,7 +25,6 @@ export const GithubLink = (): string => {
       display:block;
       text-align: center;
       padding: 1rem;
-      margin-top: 3rem;
       color: var(--text-color);
     }
 

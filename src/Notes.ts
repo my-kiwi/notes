@@ -1,12 +1,99 @@
-export const Notes = (): string => {
-  return `
-    <textarea id="notepad" placeholder="Start typing..."></textarea>
-  `;
+type NoteTab = {
+  id: string;
+  title: string;
+  content: string;
 };
 
 const DB_NAME = 'NotesDB';
 const STORE_NAME = 'notes';
-const NOTE_ID = 'main-note';
+const TABS_KEY = 'tabs';
+const DEFAULT_TAB_COUNT = 2;
+
+export const Notes = (): string => {
+  return `
+    <style>
+      .notes-shell {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .notes-footer {
+        position: sticky;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1rem 0;
+        flex-wrap: wrap;
+      }
+
+      .tab-list {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .tab-button,
+      .tab-edit-wrapper {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        color: black;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+      }
+
+      .tab-button.active {
+        background: #121212;
+        color: #ffffff;
+        border-color: rgba(0, 0, 0, 0.28);
+      }
+
+      .tab-button:hover,
+      .add-tab-button:hover {
+        border-color: rgba(0, 0, 0, 0.3);
+      }
+
+      .tab-title {
+        pointer-events: auto;
+      }
+
+      .tab-edit {
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        border-radius: 999px;
+        font: inherit;
+        background: white;
+        color: inherit;
+        outline: none;
+        height: 1.25rem;
+      }
+
+      .add-tab-button {
+        border: none;
+        background: rgba(18, 18, 18, 0.08);
+        color: inherit;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      .add-tab-button:hover {
+        background: rgba(18, 18, 18, 0.16);
+      }
+    </style>
+    <div class="notes-shell">
+     
+    <textarea id="notepad" placeholder="Start typing..."></textarea>
+       <div class="notes-footer">
+        <div id="tab-list" class="tab-list"></div>
+        <button id="add-tab" type="button" class="add-tab-button">+ Add page</button>
+      </div>
+    </div>
+  `;
+};
 
 // Request persistent storage
 async function requestPersistentStorage(): Promise<void> {
@@ -40,36 +127,44 @@ function initDB(): Promise<IDBDatabase> {
   });
 }
 
-// Load note from IndexedDB
-async function loadNote(): Promise<string> {
+function defaultTabs(): NoteTab[] {
+  return Array.from({ length: DEFAULT_TAB_COUNT }, (_, index) => ({
+    id: `tab-${index + 1}`,
+    title: `page ${index + 1}`,
+    content: '',
+  }));
+}
+
+// Load tabs from IndexedDB
+async function loadTabs(): Promise<NoteTab[]> {
   try {
     const db = await initDB();
     return new Promise((resolve) => {
       const transaction = db.transaction(STORE_NAME, 'readonly');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.get(NOTE_ID);
+      const request = store.get(TABS_KEY);
 
       request.onsuccess = () => {
-        resolve(request.result || '');
+        resolve(request.result || defaultTabs());
       };
       request.onerror = () => {
-        resolve('');
+        resolve(defaultTabs());
       };
     });
   } catch {
-    console.error('Failed to load note from IndexedDB');
-    return '';
+    console.error('Failed to load tabs from IndexedDB');
+    return defaultTabs();
   }
 }
 
-// Save note to IndexedDB
-async function saveNote(content: string): Promise<void> {
+// Save tabs to IndexedDB
+async function saveTabs(tabs: NoteTab[]): Promise<void> {
   try {
     const db = await initDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(STORE_NAME, 'readwrite');
       const store = transaction.objectStore(STORE_NAME);
-      const request = store.put(content, NOTE_ID);
+      const request = store.put(tabs, TABS_KEY);
 
       request.onsuccess = () => {
         resolve();
@@ -79,44 +174,220 @@ async function saveNote(content: string): Promise<void> {
       };
     });
   } catch (error) {
-    console.error('Failed to save note to IndexedDB:', error);
+    console.error('Failed to save tabs to IndexedDB:', error);
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+let tabs: NoteTab[] = [];
+let activeTabId = '';
+let editingTabId: string | null = null;
+let saveTimeout: ReturnType<typeof setTimeout>;
+
+function getActiveTab(): NoteTab {
+  return tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+}
+
+function render(): void {
+  const tabList = document.getElementById('tab-list');
+  const textarea = document.getElementById('notepad') as HTMLTextAreaElement;
+
+  if (!tabList || !textarea) {
+    return;
+  }
+
+  tabList.innerHTML = tabs
+    .map((tab) => {
+      if (editingTabId === tab.id) {
+        return `
+          <div class="tab-edit-wrapper">
+            <input class="tab-edit" data-tab-id="${tab.id}" value="${escapeHtml(tab.title)}" aria-label="Rename page">
+          </div>
+        `;
+      }
+
+      return `
+        <button type="button" class="tab-button${tab.id === activeTabId ? ' active' : ''}" data-tab-id="${tab.id}">
+          <span class="tab-title" data-tab-id="${tab.id}" title="Click to rename">${escapeHtml(tab.title)}</span>
+        </button>
+      `;
+    })
+    .join('');
+
+  const activeTab = getActiveTab();
+  textarea.value = activeTab?.content || '';
+
+  if (editingTabId) {
+    window.requestAnimationFrame(() => {
+      const editInput = document.querySelector<HTMLInputElement>(
+        `.tab-edit[data-tab-id="${editingTabId}"]`
+      );
+      if (editInput) {
+        editInput.focus();
+        editInput.select();
+      }
+    });
+  }
+}
+
+function saveTabsDebounced(): void {
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    saveTabs(tabs).catch((error) => {
+      console.error('Auto-save failed:', error);
+    });
+  }, 500);
+}
+
+function saveCurrentTabContent(): void {
+  const textarea = document.getElementById('notepad') as HTMLTextAreaElement;
+  const currentTab = getActiveTab();
+  if (!textarea || !currentTab) {
+    return;
+  }
+  currentTab.content = textarea.value;
+  saveTabsDebounced();
+}
+
+function startRename(tabId: string): void {
+  editingTabId = tabId;
+  render();
+}
+
+function commitRename(tabId: string): void {
+  const input = document.querySelector<HTMLInputElement>(`.tab-edit[data-tab-id="${tabId}"]`);
+  if (!input) {
+    editingTabId = null;
+    render();
+    return;
+  }
+
+  const newTitle = input.value.trim() || `page ${tabs.findIndex((tab) => tab.id === tabId) + 1}`;
+  const tab = tabs.find((item) => item.id === tabId);
+  if (tab) {
+    tab.title = newTitle;
+    saveTabs(tabs).catch((error) => {
+      console.error('Rename save failed:', error);
+    });
+  }
+
+  editingTabId = null;
+  render();
+}
+
+function cancelRename(): void {
+  editingTabId = null;
+  render();
+}
+
+function selectTab(tabId: string): void {
+  if (tabId === activeTabId) {
+    return;
+  }
+
+  saveCurrentTabContent();
+  activeTabId = tabId;
+  editingTabId = null;
+  render();
+}
+
+function addTab(): void {
+  const nextPageNumber = tabs.length + 1;
+  const newTab: NoteTab = {
+    id: crypto.randomUUID(),
+    title: `page ${nextPageNumber}`,
+    content: '',
+  };
+
+  tabs.push(newTab);
+  activeTabId = newTab.id;
+  saveTabs(tabs).catch((error) => {
+    console.error('Failed to save new tab:', error);
+  });
+  editingTabId = null;
+  render();
 }
 
 // Initialize the app
 async function init(): Promise<void> {
-  // Request persistent storage first
   await requestPersistentStorage();
 
   const textarea = document.getElementById('notepad') as HTMLTextAreaElement;
+  const tabList = document.getElementById('tab-list');
+  const addTabButton = document.getElementById('add-tab');
 
-  if (!textarea) {
-    console.error('Notepad textarea not found');
+  if (!textarea || !tabList || !addTabButton) {
+    console.error('Notes UI elements not found');
     return;
   }
 
-  // Load existing note
-  textarea.value = await loadNote();
+  tabs = await loadTabs();
+  if (tabs.length === 0) {
+    tabs = defaultTabs();
+  }
+  activeTabId = tabs[0].id;
+  render();
 
-  // Save on input with debouncing to avoid excessive storage writes
-  let saveTimeout: ReturnType<typeof setTimeout>;
   textarea.addEventListener('input', () => {
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-      saveNote(textarea.value).catch((error) => {
-        console.error('Auto-save failed:', error);
-      });
-    }, 500);
+    saveCurrentTabContent();
   });
 
-  // Also save when leaving the page
+  tabList.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    const titleElement = target.closest<HTMLSpanElement>('.tab-title');
+    if (titleElement && titleElement.dataset.tabId) {
+      event.stopPropagation();
+      startRename(titleElement.dataset.tabId);
+      return;
+    }
+
+    const button = target.closest<HTMLButtonElement>('.tab-button');
+    if (button && button.dataset.tabId) {
+      selectTab(button.dataset.tabId);
+    }
+  });
+
+  tabList.addEventListener('keydown', (event) => {
+    const input = event.target as HTMLInputElement;
+    if (!input.classList.contains('tab-edit')) {
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitRename(input.dataset.tabId || '');
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelRename();
+    }
+  });
+
+  tabList.addEventListener('focusout', (event) => {
+    const input = event.target as HTMLInputElement;
+    if (input.classList.contains('tab-edit') && input.dataset.tabId) {
+      commitRename(input.dataset.tabId);
+    }
+  });
+
+  addTabButton.addEventListener('click', () => {
+    saveCurrentTabContent();
+    addTab();
+  });
+
   window.addEventListener('beforeunload', () => {
-    saveNote(textarea.value).catch((error) => {
-      console.error('Save on unload failed:', error);
-    });
+    saveCurrentTabContent();
   });
 
-  // Focus the textarea automatically
   textarea.focus();
 }
 
