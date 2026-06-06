@@ -191,6 +191,15 @@ let tabs: NoteTab[] = [];
 let activeTabId = '';
 let editingTabId: string | null = null;
 let saveTimeout: ReturnType<typeof setTimeout>;
+let touchLongPressTimer: number | null = null;
+let touchLongPressActivated = false;
+
+function clearTouchLongPress(): void {
+  if (touchLongPressTimer !== null) {
+    clearTimeout(touchLongPressTimer);
+    touchLongPressTimer = null;
+  }
+}
 
 function getActiveTab(): NoteTab {
   return tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
@@ -216,7 +225,7 @@ function render(): void {
 
       return `
         <button type="button" class="tab-button${tab.id === activeTabId ? ' active' : ''}" data-tab-id="${tab.id}">
-          <span class="tab-title" data-tab-id="${tab.id}" title="Click to rename">${escapeHtml(tab.title)}</span>
+          <span class="tab-title" data-tab-id="${tab.id}" title="Double-click to rename">${escapeHtml(tab.title)}</span>
         </button>
       `;
     })
@@ -341,19 +350,49 @@ async function init(): Promise<void> {
   });
 
   tabList.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    const titleElement = target.closest<HTMLSpanElement>('.tab-title');
-    if (titleElement && titleElement.dataset.tabId) {
-      event.stopPropagation();
-      startRename(titleElement.dataset.tabId);
+    if (touchLongPressActivated) {
+      touchLongPressActivated = false;
       return;
     }
 
+    const target = event.target as HTMLElement;
     const button = target.closest<HTMLButtonElement>('.tab-button');
     if (button && button.dataset.tabId) {
       selectTab(button.dataset.tabId);
     }
   });
+
+  tabList.addEventListener('dblclick', (event) => {
+    const target = event.target as HTMLElement;
+    const titleElement = target.closest<HTMLSpanElement>('.tab-title');
+    if (titleElement && titleElement.dataset.tabId) {
+      event.stopPropagation();
+      startRename(titleElement.dataset.tabId);
+    }
+  });
+
+  tabList.addEventListener('touchstart', (event) => {
+    const target = event.target as HTMLElement;
+    const titleElement = target.closest<HTMLSpanElement>('.tab-title');
+    if (!titleElement || !titleElement.dataset.tabId) {
+      return;
+    }
+
+    clearTouchLongPress();
+    touchLongPressActivated = false;
+    touchLongPressTimer = window.setTimeout(() => {
+      touchLongPressActivated = true;
+      startRename(titleElement.dataset.tabId!);
+    }, 500);
+  });
+
+  const cancelTouch = (): void => {
+    clearTouchLongPress();
+  };
+
+  tabList.addEventListener('touchend', cancelTouch);
+  tabList.addEventListener('touchcancel', cancelTouch);
+  tabList.addEventListener('touchmove', cancelTouch);
 
   tabList.addEventListener('keydown', (event) => {
     const input = event.target as HTMLInputElement;
