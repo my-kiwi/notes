@@ -35,6 +35,7 @@ export const Notes = (): string => {
       }
 
       .tab-button,
+      .add-tab-button,
       .tab-edit-wrapper {
         display: inline-flex;
         align-items: center;
@@ -69,19 +70,6 @@ export const Notes = (): string => {
         color: inherit;
         outline: none;
         height: 1.25rem;
-      }
-
-      .add-tab-button {
-        border: none;
-        background: rgba(18, 18, 18, 0.08);
-        color: inherit;
-        border-radius: 999px;
-        cursor: pointer;
-        transition: background 0.2s;
-      }
-
-      .add-tab-button:hover {
-        background: rgba(18, 18, 18, 0.16);
       }
     </style>
     <div class="notes-shell">
